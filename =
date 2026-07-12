@@ -1,0 +1,278 @@
+<!-- ========================================== -->
+<!-- 1. DEPENDENCIES (app/build.gradle)         -->
+<!-- ========================================== -->
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+}
+
+<!-- ========================================== -->
+<!-- 2. MANIFEST (app/src/main/AndroidManifest.xml) -->
+<!-- ========================================== -->
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.clockapp">
+
+    <!-- Permissions needed for precise alarms -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Speaking Clock"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Receiver for handling the alarm event -->
+        <receiver android:name=".AlarmReceiver" android:exported="true" />
+    </application>
+</manifest>
+
+<!-- ========================================== -->
+<!-- 3. UI DESIGN (app/src/main/res/layout/activity_main.xml) -->
+<!-- ========================================== -->
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F4F6FA"
+    android:padding="20dp">
+
+    <!-- Modern Digital Clock Display -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/clockCard"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
+        android:layout_marginTop="30dp"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="10dp"
+        app:cardBackgroundColor="#FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextClock
+                android:id="@+id/textClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="hh:mm:ss a"
+                android:textColor="#2D3748"
+                android:textSize="38sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="বর্তমান সময় (Current Time)"
+                android:textColor="#718096"
+                android:textSize="14sp"
+                android:layout_marginTop="8dp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Customized Input Field -->
+    <EditText
+        android:id="@+id/etAlarmMessage"
+        android:layout_width="match_parent"
+        android:layout_height="55dp"
+        android:layout_below="@id/clockCard"
+        android:layout_marginTop="40dp"
+        android:background="@android:drawable/editbox_background"
+        android:hint="অ্যালার্মের সময় যা পড়ে শোনাবে..."
+        android:paddingLeft="15dp"
+        android:paddingRight="15dp"
+        android:inputType="text"
+        android:textColor="#2D3748"
+        android:textSize="16sp" />
+
+    <!-- Action Button -->
+    <Button
+        android:id="@+id/btnSelectTime"
+        android:layout_width="match_parent"
+        android:layout_height="55dp"
+        android:layout_below="@id/etAlarmMessage"
+        android:layout_marginTop="25dp"
+        android:backgroundTint="#4F46E5"
+        android:text="অ্যালার্ম সেট করুন"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:cornerRadius="14dp" />
+
+    <!-- Status Tracker -->
+    <TextView
+        android:id="@+id/tvAlarmStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/btnSelectTime"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="25dp"
+        android:text="কোনো অ্যালার্ম একটিভ নেই"
+        android:textColor="#E53E3E"
+        android:textSize="15sp"
+        android:textStyle="italic|bold" />
+</RelativeLayout>
+
+/* ========================================== */
+/* 4. MAIN ACTIVITY (app/src/main/java/com/example/clockapp/MainActivity.java) */
+/* ========================================== */
+package com.example.clockapp;
+
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.app.TimePickerDialog;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.os.Bundle;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+import java.util.Calendar;
+
+public class MainActivity extends AppCompatActivity {
+
+    private EditText etAlarmMessage;
+    private Button btnSelectTime;
+    private TextView tvAlarmStatus;
+    private Calendar calendar;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        etAlarmMessage = findViewById(R.id.etAlarmMessage);
+        btnSelectTime = findViewById(R.id.btnSelectTime);
+        tvAlarmStatus = findViewById(R.id.tvAlarmStatus);
+
+        btnSelectTime.setOnClickListener(v -> openTimePickerDialog());
+    }
+
+    private void openTimePickerDialog() {
+        calendar = Calendar.getInstance();
+        int hour = calendar.get(Calendar.HOUR_OF_DAY);
+        int minute = calendar.get(Calendar.MINUTE);
+
+        TimePickerDialog timePickerDialog = new TimePickerDialog(this, (view, hourOfDay, minuteOfHour) -> {
+            calendar.set(Calendar.HOUR_OF_DAY, hourOfDay);
+            calendar.set(Calendar.MINUTE, minuteOfHour);
+            calendar.set(Calendar.SECOND, 0);
+
+            // If time selected has already passed today, set it for tomorrow
+            if (calendar.before(Calendar.getInstance())) {
+                calendar.add(Calendar.DATE, 1);
+            }
+
+            setAlarm(calendar);
+        }, hour, minute, false);
+
+        timePickerDialog.show();
+    }
+
+    private void setAlarm(Calendar targetCal) {
+        String message = etAlarmMessage.getText().toString().trim();
+        if(message.isEmpty()) {
+            message = "সময় হয়ে গেছে, অনুগ্রহ করে উঠে পড়ুন।";
+        }
+
+        Intent intent = new Intent(this, AlarmReceiver.class);
+        intent.putExtra("alarm_message", message);
+        
+        // Handles requirements safely for API 31+ 
+        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : 
+                PendingIntent.FLAG_UPDATE_CURRENT;
+
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 1, intent, flags);
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+
+        if (alarmManager != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, targetCal.getTimeInMillis(), pendingIntent);
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, targetCal.getTimeInMillis(), pendingIntent);
+            }
+            
+            int displayedHour = targetCal.get(Calendar.HOUR);
+            if (displayedHour == 0) displayedHour = 12; // Formats 0 to 12 for standard time display
+            
+            String amPm = (targetCal.get(Calendar.AM_PM) == Calendar.AM) ? "AM" : "PM";
+            String timeText = "অ্যালার্ম একটিভ: " + displayedHour + ":" + String.format("%02d", targetCal.get(Calendar.MINUTE)) + " " + amPm;
+            
+            tvAlarmStatus.setText(timeText);
+            Toast.makeText(this, "অ্যালার্ম চালু করা হয়েছে!", Toast.LENGTH_SHORT).show();
+        }
+    }
+}
+
+/* ========================================== */
+/* 5. ALARM RECEIVER (app/src/main/java/com/example/clockapp/AlarmReceiver.java) */
+/* ========================================== */
+package com.example.clockapp;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.speech.tts.TextToSpeech;
+import android.widget.Toast;
+import java.util.Locale;
+
+public class AlarmReceiver extends BroadcastReceiver {
+    private static TextToSpeech tts;
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        String message = intent.getStringExtra("alarm_message");
+        
+        Toast.makeText(context, "অ্যালার্ম বাজছে!", Toast.LENGTH_LONG).show();
+
+        // Initialize Text-To-Speech
+        tts = new TextToSpeech(context.getApplicationContext(), status -> {
+            if (status == TextToSpeech.SUCCESS) {
+                // Sets locale to Bangla. If Bangla engine data isn't active on phone, falls back to English.
+                int result = tts.setLanguage(new Locale("bn", "BD")); 
+                
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    tts.setLanguage(Locale.US);
+                }
+                
+                tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, null);
+            }
+        });
+    }
+}
+
+# ==========================================
+# 6. GITHUB TERMINAL COMMANDS
+# ==========================================
+# Run these commands step-by-step inside your Android Studio Terminal:
+
+git init
+git add .
+git commit -m "Initial commit - Fully Working Speaking Alarm Clock"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY_NAME.git
+git push -u origin main
+
